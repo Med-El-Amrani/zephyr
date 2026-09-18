@@ -33,6 +33,7 @@
 
 #include "audio/bap_endpoint.h"
 #include "audio/bap_iso.h"
+#include "bap_unicast_client.h"
 #include "cap_initiator.h"
 #include "conn.h"
 #include "expects_util.h"
@@ -160,6 +161,7 @@ static void cap_initiator_test_unicast_start_before(void *f)
 	int err;
 
 	(void)memset(fixture, 0, sizeof(*fixture));
+	mock_bap_unicast_client_set_started_before_connected(false);
 	cap_initiator_test_unicast_start_fixture_init(f);
 
 	err = bt_cap_initiator_register_cb(&mock_cap_initiator_cb);
@@ -221,7 +223,8 @@ ZTEST_SUITE(cap_initiator_test_unicast_start, NULL, cap_initiator_test_unicast_s
 	    cap_initiator_test_unicast_start_before, cap_initiator_test_unicast_start_after,
 	    cap_initiator_test_unicast_start_teardown);
 
-static ZTEST_F(cap_initiator_test_unicast_start, test_initiator_unicast_start)
+static void
+run_initiator_unicast_start_test(struct cap_initiator_test_unicast_start_fixture *fixture)
 {
 	int err;
 
@@ -255,6 +258,18 @@ static ZTEST_F(cap_initiator_test_unicast_start, test_initiator_unicast_start)
 		zassert_equal(state, BT_BAP_EP_STATE_STREAMING,
 			      "[%zu]: Stream %p unexpected state: %d", i, bap_stream, state);
 	}
+}
+
+static ZTEST_F(cap_initiator_test_unicast_start, test_initiator_unicast_start)
+{
+	run_initiator_unicast_start_test(fixture);
+}
+
+static ZTEST_F(cap_initiator_test_unicast_start,
+	       test_initiator_unicast_start_started_before_connected)
+{
+	mock_bap_unicast_client_set_started_before_connected(true);
+	run_initiator_unicast_start_test(fixture);
 }
 
 static ZTEST_F(cap_initiator_test_unicast_start, test_initiator_unicast_start_inval_param_null)

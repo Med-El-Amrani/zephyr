@@ -28,12 +28,14 @@
 
 #include "audio/bap_endpoint.h"
 #include "audio/bap_iso.h"
+#include "bap_unicast_client.h"
 #include "conn.h"
 
 LOG_MODULE_REGISTER(bt_bap_unicast_client, CONFIG_BT_BAP_UNICAST_CLIENT_LOG_LEVEL);
 
 static sys_slist_t unicast_client_cbs = SYS_SLIST_STATIC_INIT(&unicast_client_cbs);
 static struct bt_bap_unicast_group bap_unicast_group;
+static bool started_before_connected;
 
 static struct unicast_client {
 #if CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT > 0
@@ -44,6 +46,11 @@ static struct unicast_client {
 #endif /* CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT > 0 */
 	struct bt_conn *conn;
 } uni_cli_insts[CONFIG_BT_MAX_CONN];
+
+void mock_bap_unicast_client_set_started_before_connected(bool enabled)
+{
+	started_before_connected = enabled;
+}
 
 bool bt_bap_unicast_client_has_ep(const struct bt_bap_ep *ep)
 {
@@ -307,6 +314,15 @@ int bt_bap_unicast_client_metadata(struct bt_bap_stream *stream, const uint8_t m
 	return 0;
 }
 
+static void mock_sink_stream_started(struct bt_bap_stream *stream)
+{
+	stream->ep->state = BT_BAP_EP_STATE_STREAMING;
+
+	if (stream->ops != NULL && stream->ops->started != NULL) {
+		stream->ops->started(stream);
+	}
+}
+
 int bt_bap_unicast_client_connect(struct bt_bap_stream *stream)
 {
 	struct bt_bap_ep *ep;
@@ -325,18 +341,19 @@ int bt_bap_unicast_client_connect(struct bt_bap_stream *stream)
 		return -EINVAL;
 	}
 
+	if (ep->dir == BT_AUDIO_DIR_SINK && started_before_connected) {
+		/* Mock the server notification arriving before the CIS connected event. */
+		mock_sink_stream_started(stream);
+	}
+
 	ep->iso->chan.state = BT_ISO_STATE_CONNECTED;
 	if (stream->ops != NULL && stream->ops->connected != NULL) {
 		stream->ops->connected(stream);
 	}
 
-	if (ep->dir == BT_AUDIO_DIR_SINK) {
+	if (ep->dir == BT_AUDIO_DIR_SINK && !started_before_connected) {
 		/* Mocking that the unicast server automatically starts the stream */
-		ep->state = BT_BAP_EP_STATE_STREAMING;
-
-		if (stream->ops != NULL && stream->ops->started != NULL) {
-			stream->ops->started(stream);
-		}
+		mock_sink_stream_started(stream);
 	}
 
 	return 0;
